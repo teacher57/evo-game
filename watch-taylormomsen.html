@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evo game · taylormomsen</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
+    canvas { display: block; }
+    /* New run menu (server mode only) */
+    .run-button { position: fixed; top: 12px; right: 12px; font: 13px ui-monospace, Menlo, monospace; color: #eee;
+                  background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.35); border-radius: 4px;
+                  padding: 6px 12px; cursor: pointer; }
+    .run-button:hover { border-color: #fff; }
+    .ach-panel { max-height: calc(100vh - 80px); overflow-y: auto; width: min(680px, calc(100vw - 32px)); }
+    .ach-panel .run-menu-buttons { position: sticky; bottom: -18px; margin: 0 -20px -18px; padding: 12px 20px;
+                                   background: rgba(0,0,0,0.96); border-top: 1px solid rgba(255,255,255,0.2); }
+    .ach-item { margin: 0 0 10px; line-height: 1.45; color: #ddd; }
+    .ach-item span { color: #9fd49f; }
+    .ach-item.locked { opacity: 0.45; }
+    .ach-item.locked span { color: #aaa; }
+    .ach-toasts { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); display: flex;
+                  flex-direction: column; gap: 6px; align-items: center; }
+    .ach-toast { font: 13px ui-monospace, Menlo, monospace; color: #eee; background: rgba(0,0,0,0.9); cursor: pointer;
+                 border: 1px solid #e8c547; border-radius: 4px; padding: 8px 14px; text-align: center; }
+    .ach-toast b { color: #e8c547; }
+    .ach-toast span { color: #bbb; }
+    .save-form { position: fixed; top: 50px; right: 12px; display: flex; gap: 6px; padding: 8px;
+                 background: rgba(0,0,0,0.9); border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; }
+    .save-form input { width: 220px; font: 13px ui-monospace, Menlo, monospace; color: #eee; background: #111;
+                       border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; padding: 5px 8px; }
+    .save-form button { font: 13px ui-monospace, Menlo, monospace; color: #eee; background: #111;
+                        border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+    .save-form button[data-act="save"] { background: #eee; color: #000; }
+    .run-menu { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px));
+                background: rgba(0,0,0,0.92); border: 1px solid rgba(255,255,255,0.5); border-radius: 6px; padding: 18px 20px;
+                color: #eee; font: 13px ui-monospace, Menlo, monospace; }
+    .run-menu h2 { margin: 0 0 6px; font-size: 18px; }
+    .run-menu p { margin: 0 0 14px; color: #aaa; }
+    .run-menu label { display: block; margin: 0 0 12px; color: #ccc; }
+    .run-menu select { display: block; width: 100%; margin-top: 4px; font: inherit; color: #eee; background: #111;
+                       border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; padding: 6px; }
+    .run-menu-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+    .run-menu-buttons button { font: inherit; color: #eee; background: #111; border: 1px solid rgba(255,255,255,0.5);
+                               border-radius: 4px; padding: 6px 16px; cursor: pointer; }
+    .run-menu-buttons button[data-act="start"] { background: #eee; color: #000; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <!-- Watches the world running on taylormomsen's server (see server/server.js), so it needs no ?server= in the
+       address: just open this file. index.html is the same page without a server (a world of its own). -->
+  <script>window.EVO_SERVER = "http://100.83.245.27:8787";</script>
+  <script src="config.js"></script>
+  <script src="achievements.js"></script>
+  <script src="world.js"></script>
+  <script src="brain.js"></script>
+  <script src="player.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

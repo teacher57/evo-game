@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evo look ideas</title>
+<style>
+  :root { --bg: #16140f; --card: #221f19; --text: #f1ece2; --muted: #b8ae9c; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 18px; }
+  .card h2 { font-size: 19px; margin: 0 0 2px; }
+  .card p { margin: 0 0 10px; color: var(--muted); }
+  canvas { width: 100%; height: auto; display: block; border-radius: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>5 more looks for the evo game</h1>
+  <p class="sub">Each shows a slice of the world (left) and both creatures up close (right). The glowing one is
+    calling for a mate. Body colors still come from the genes, so families keep their look.</p>
+  <div id="cards"></div>
+</main>
+<script>
+const W = 960, H = 300, SCENE = 600;
+const HERB = [[120, 210, 90], [90, 200, 160], [190, 210, 80], [140, 190, 70]];
+const PRED = [[220, 80, 70], [230, 130, 60]];
+
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rgb = (c, a = 1) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const shade = (c, k) => c.map((v) => Math.max(0, Math.min(255, v * k)));
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+function circle(ctx, x, y, r, fill, stroke, lw = 1.5) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+function ellipse(ctx, x, y, rx, ry, rot, fill, stroke, lw = 1.5) {
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+// draw in a local frame: origin at (x, y), +x = facing direction
+function local(ctx, x, y, a, fn) { ctx.save(); ctx.translate(x, y); ctx.rotate(a); fn(); ctx.restore(); }
+
+// =============== 1. Pixel retro ===============
+const BUNNY = [".......d..", "......dd..", "......##..", "..######e#", "w########p", ".#######..", "..d.d.d.d."];
+const FOX = [".........d.d", "........####", "ww.....###e#", "w##########k", ".#########..", ".##d####d...", ".d..d..d.d.."];
+function sprite(ctx, rows, x, y, a, r, c, glow) {
+  const p = Math.max(2, Math.round(r / 3.5));
+  const w = rows[0].length * p, h = rows.length * p;
+  const flip = Math.cos(a) < 0;
+  const pal = { "#": rgb(c), d: rgb(shade(c, 0.6)), e: "#111", k: "#111", w: "#f4f1ea", p: "#f3a3b5" };
+  if (glow) {
+    ctx.fillStyle = "rgba(255,235,120,0.25)";
+    for (let i = 3; i >= 1; i--) ctx.fillRect(Math.round(x - w / 2 - i * p), Math.round(y - h / 2 - i * p), w + 2 * i * p, h + 2 * i * p);
+  }
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(Math.round(x - w / 2 + p), Math.round(y + h / 2 - p), w - 2 * p, p);
+  rows.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === ".") return;
+    ctx.fillStyle = pal[ch];
+    const col = flip ? row.length - 1 - i : i;
+    ctx.fillRect(Math.round(x - w / 2 + col * p), Math.round(y - h / 2 + j * p), p, p);
+  }));
+}
+const pixel = {
+  name: "1. Pixel retro",
+  desc: "Chunky 8-bit sprites, like an old console game. Grass eater = bunny, meat eater = fox. Mating = a blinking yellow pixel halo.",
+  ground(ctx, cells, cell, R) {
+    ctx.fillStyle = "#5a4630"; ctx.fillRect(0, 0, SCENE, H);
+    for (let k = 0; k < 900; k++) { ctx.fillStyle = R() < 0.5 ? "#4f3d29" : "#66513a"; ctx.fillRect((R() * SCENE / 3 | 0) * 3, (R() * H / 3 | 0) * 3, 3, 3); }
+    for (const [i, j, g] of cells) {
+      ctx.fillStyle = rgb(mix([74, 120, 52], [70, 170, 60], g)); ctx.fillRect(i * cell, j * cell, cell, cell);
+      for (let t = 0; t < 3 + g * 5; t++) { ctx.fillStyle = "#9be06a"; ctx.fillRect(i * cell + (R() * (cell - 3) / 3 | 0) * 3, j * cell + (R() * (cell - 6) / 3 | 0) * 3, 3, 6); }
+    }
+  },
+  herb: (ctx, x, y, a, r, c, glow) => sprite(ctx, BUNNY, x, y, a, r * 1.2, c, glow),
+  pred: (ctx, x, y, a, r, c, glow) => sprite(ctx, FOX, x, y, a, r * 1.1, c, glow),
+};
+
+// =============== 2. Kawaii pastel ===============
+function eyes(ctx, r, angry) {
+  for (const s of [-1, 1]) {
+    circle(ctx, r * 0.35, s * r * 0.33, r * 0.22, "#fff", "#3a2b2b", r * 0.05);
+    circle(ctx, r * 0.42, s * r * 0.33, r * 0.11, "#2b1f1f");
+    circle(ctx, r * 0.45, s * r * 0.29, r * 0.04, "#fff");
+    if (angry) {
+      ctx.strokeStyle = "#3a2b2b"; ctx.lineWidth = r * 0.08; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(r * 0.62, s * r * 0.12); ctx.lineTo(r * 0.5, s * r * 0.55); ctx.stroke();
+    } else {
+      ellipse(ctx, r * 0.15, s * r * 0.62, r * 0.12, r * 0.08, 0, "rgba(255,130,150,0.7)");
+    }
+  }
+}
+function heart(ctx, x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color; ctx.beginPath();
+  ctx.moveTo(0, 0.35); ctx.bezierCurveTo(-1, -0.35, -0.45, -1.05, 0, -0.5); ctx.bezierCurveTo(0.45, -1.05, 1, -0.35, 0, 0.35);
+  ctx.fill(); ctx.restore();
+}
+const kawaii = {
+  name: "2. Kawaii pastel",
+  labelColor: "#6b5a50",
+  desc: "Soft pastel paper look with cute round blobs and big eyes. Grass eater = mochi with a leaf sprout, meat eater = grumpy cat blob with fangs. Mating = pink glow + floating heart.",
+  ground(ctx, cells, cell, R) {
+    ctx.fillStyle = "#f5ecdd"; ctx.fillRect(0, 0, SCENE, H);
+    for (const [i, j, g] of cells) {
+      ctx.fillStyle = rgb(mix([214, 232, 190], [150, 214, 150], g));
+      ctx.beginPath(); ctx.roundRect(i * cell + 2, j * cell + 2, cell - 4, cell - 4, cell * 0.35); ctx.fill();
+      if (g > 0.7 && R() < 0.5) circle(ctx, i * cell + cell * 0.7, j * cell + cell * 0.3, 2.5, R() < 0.5 ? "#ffd1dc" : "#fff6b0");
+    }
+  },
+  herb(ctx, x, y, a, r, c, glow) {
+    if (glow) { const g = ctx.createRadialGradient(x, y, r, x, y, r * 2.6); g.addColorStop(0, "rgba(255,150,190,0.55)"); g.addColorStop(1, "rgba(255,150,190,0)"); circle(ctx, x, y, r * 2.6, g); heart(ctx, x + r * 0.9, y - r * 1.5, r * 0.55, "#ff6f9a"); }
+    ellipse(ctx, x + 2, y + r * 0.85, r * 0.9, r * 0.3, 0, "rgba(120,90,60,0.18)");
+    local(ctx, x, y, a, () => {
+      circle(ctx, 0, 0, r, rgb(mix(c, [255, 255, 255], 0.35)), "#5a4540", r * 0.07);
+      ctx.fillStyle = "#6fbf5a"; ctx.beginPath(); ctx.ellipse(-r * 0.15, 0, r * 0.32, r * 0.13, 0.5, 0, Math.PI * 2); ctx.fill();
+      eyes(ctx, r, false);
+    });
+  },
+  pred(ctx, x, y, a, r, c, glow) {
+    if (glow) { const g = ctx.createRadialGradient(x, y, r, x, y, r * 2.6); g.addColorStop(0, "rgba(255,150,190,0.55)"); g.addColorStop(1, "rgba(255,150,190,0)"); circle(ctx, x, y, r * 2.6, g); heart(ctx, x + r, y - r * 1.5, r * 0.5, "#ff6f9a"); }
+    ellipse(ctx, x + 2, y + r * 0.85, r * 0.95, r * 0.3, 0, "rgba(120,90,60,0.18)");
+    local(ctx, x, y, a, () => {
+      const body = rgb(mix(c, [255, 255, 255], 0.2));
+      for (const s of [-1, 1]) { ctx.fillStyle = body; ctx.strokeStyle = "#5a4540"; ctx.lineWidth = r * 0.07; ctx.beginPath(); ctx.moveTo(-r * 0.1, s * r * 0.55); ctx.lineTo(-r * 0.75, s * r * 1.05); ctx.lineTo(-r * 0.6, s * r * 0.25); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      circle(ctx, 0, 0, r, body, "#5a4540", r * 0.07);
+      eyes(ctx, r, true);
+      ctx.fillStyle = "#fff"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.8, s * r * 0.08); ctx.lineTo(r * 0.98, s * r * 0.16); ctx.lineTo(r * 0.82, s * r * 0.24); ctx.fill(); }
+    });
+  },
+};
+
+// =============== 3. Bioluminescent night ===============
+const night = {
+  name: "3. Night glow",
+  desc: "A dark night world where grass is glowing moss. Grass eater = firefly with a glowing belly, meat eater = shadow stalker with glowing eyes. The mating glow becomes a bright bloom — very visible in the dark.",
+  ground(ctx, cells, cell, R) {
+    ctx.fillStyle = "#070b14"; ctx.fillRect(0, 0, SCENE, H);
+    ctx.globalCompositeOperation = "lighter";
+    for (const [i, j, g] of cells) {
+      for (let t = 0; t < 4 + g * 14; t++) {
+        const x = i * cell + R() * cell, y = j * cell + R() * cell, rr = 1 + R() * 2.2;
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, rr * 3); gr.addColorStop(0, `rgba(80,255,190,${0.25 + g * 0.35})`); gr.addColorStop(1, "rgba(80,255,190,0)");
+        circle(ctx, x, y, rr * 3, gr);
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  },
+  herb(ctx, x, y, a, r, c, glow) {
+    ctx.globalCompositeOperation = "lighter";
+    const R0 = glow ? r * 4.5 : r * 2;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R0); g.addColorStop(0, rgb(c, glow ? 0.9 : 0.55)); g.addColorStop(1, rgb(c, 0)); circle(ctx, x, y, R0, g);
+    ctx.globalCompositeOperation = "source-over";
+    local(ctx, x, y, a, () => {
+      for (const s of [-1, 1]) ellipse(ctx, r * 0.1, s * r * 0.55, r * 0.6, r * 0.3, s * 0.5, "rgba(200,230,255,0.25)", "rgba(200,230,255,0.5)", 1);
+      ellipse(ctx, -r * 0.25, 0, r * 0.6, r * 0.45, 0, rgb(mix(c, [255, 255, 230], 0.5)));
+      ellipse(ctx, r * 0.45, 0, r * 0.32, r * 0.3, 0, "#1a1e2a");
+    });
+  },
+  pred(ctx, x, y, a, r, c, glow) {
+    if (glow) { ctx.globalCompositeOperation = "lighter"; const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4); g.addColorStop(0, rgb(c, 0.8)); g.addColorStop(1, rgb(c, 0)); circle(ctx, x, y, r * 4, g); ctx.globalCompositeOperation = "source-over"; }
+    local(ctx, x, y, a, () => {
+      ctx.beginPath(); ctx.moveTo(r * 1.5, 0); ctx.lineTo(r * 0.2, -r * 0.8); ctx.lineTo(-r * 1.1, -r * 0.5); ctx.lineTo(-r * 0.7, 0); ctx.lineTo(-r * 1.1, r * 0.5); ctx.lineTo(r * 0.2, r * 0.8); ctx.closePath();
+      ctx.fillStyle = "#05070d"; ctx.fill(); ctx.strokeStyle = rgb(c, 0.9); ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.globalCompositeOperation = "lighter";
+      for (const s of [-1, 1]) { const ex = r * 0.6, ey = s * r * 0.25; const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.45); g.addColorStop(0, "rgba(255,250,200,1)"); g.addColorStop(0.3, rgb(c, 0.9)); g.addColorStop(1, rgb(c, 0)); circle(ctx, ex, ey, r * 0.45, g); }
+      ctx.globalCompositeOperation = "source-over";
+    });
+  },
+};
+
+// =============== 4. Blueprint drones ===============
+const blueprint = {
+  name: "4. Blueprint drones",
+  desc: "A clean sci-fi radar/blueprint screen. Grass is hatched solar cells, grass eater = hexagon harvester drone, meat eater = chevron hunter drone with a scan cone. Mating = pulsing dashed rings.",
+  ground(ctx, cells, cell) {
+    ctx.fillStyle = "#0c1a2b"; ctx.fillRect(0, 0, SCENE, H);
+    ctx.strokeStyle = "rgba(120,180,255,0.12)"; ctx.lineWidth = 1;
+    for (let x = 0; x <= SCENE; x += cell) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); ctx.stroke(); }
+    for (let y = 0; y <= H; y += cell) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(SCENE, y + 0.5); ctx.stroke(); }
+    for (const [i, j, g] of cells) {
+      ctx.save(); ctx.beginPath(); ctx.rect(i * cell + 2, j * cell + 2, cell - 4, cell - 4); ctx.clip();
+      ctx.fillStyle = `rgba(60,220,200,${0.05 + g * 0.12})`; ctx.fillRect(i * cell, j * cell, cell, cell);
+      ctx.strokeStyle = `rgba(90,230,210,${0.25 + g * 0.55})`; ctx.lineWidth = 1;
+      const step = 10 - g * 6;
+      for (let d = -cell; d < cell * 2; d += step) { ctx.beginPath(); ctx.moveTo(i * cell + d, j * cell); ctx.lineTo(i * cell + d - cell, j * cell + cell); ctx.stroke(); }
+      ctx.restore();
+    }
+  },
+  herb(ctx, x, y, a, r, c, glow) {
+    if (glow) { ctx.setLineDash([4, 4]); for (const k of [1.8, 2.6, 3.4]) circle(ctx, x, y, r * k, null, rgb([255, 230, 120], 1.1 - k / 3.6), 1.4); ctx.setLineDash([]); }
+    local(ctx, x, y, a, () => {
+      ctx.beginPath(); for (let k = 0; k < 6; k++) ctx.lineTo(Math.cos(k * Math.PI / 3) * r, Math.sin(k * Math.PI / 3) * r); ctx.closePath();
+      ctx.fillStyle = rgb(c, 0.18); ctx.fill(); ctx.strokeStyle = rgb(c); ctx.lineWidth = 2; ctx.stroke();
+      circle(ctx, 0, 0, r * 0.3, null, rgb(c), 1.5);
+      ctx.beginPath(); ctx.moveTo(r * 0.3, 0); ctx.lineTo(r * 1.35, 0); ctx.stroke();
+    });
+  },
+  pred(ctx, x, y, a, r, c, glow) {
+    if (glow) { ctx.setLineDash([4, 4]); for (const k of [1.8, 2.6, 3.4]) circle(ctx, x, y, r * k, null, rgb([255, 230, 120], 1.1 - k / 3.6), 1.4); ctx.setLineDash([]); }
+    local(ctx, x, y, a, () => {
+      const cone = ctx.createRadialGradient(0, 0, r, 0, 0, r * 5); cone.addColorStop(0, rgb(c, 0.25)); cone.addColorStop(1, rgb(c, 0));
+      ctx.fillStyle = cone; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 5, -0.35, 0.35); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(r * 1.5, 0); ctx.lineTo(-r, -r); ctx.lineTo(-r * 0.4, 0); ctx.lineTo(-r, r); ctx.closePath();
+      ctx.fillStyle = rgb(c, 0.2); ctx.fill(); ctx.strokeStyle = rgb(c); ctx.lineWidth = 2; ctx.stroke();
+      circle(ctx, r * 0.35, 0, r * 0.15, rgb(c));
+    });
+  },
+};
+
+// =============== 5. Savanna ===============
+const savanna = {
+  name: "5. Savanna",
+  labelColor: "#5b4128",
+  desc: "A warm, natural top-down savanna: sandy ground and grass tufts. Grass eater = gazelle, meat eater = lion with a mane. Mating = a golden shimmer of dust.",
+  ground(ctx, cells, cell, R) {
+    ctx.fillStyle = "#d9c08c"; ctx.fillRect(0, 0, SCENE, H);
+    for (let k = 0; k < 700; k++) circle(ctx, R() * SCENE, R() * H, R() * 1.4, R() < 0.5 ? "rgba(150,115,70,0.25)" : "rgba(255,245,215,0.35)");
+    for (const [i, j, g] of cells) {
+      ctx.fillStyle = `rgba(150,160,70,${0.15 + g * 0.25})`; ctx.beginPath(); ctx.ellipse(i * cell + cell / 2, j * cell + cell / 2, cell * 0.55, cell * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+      for (let t = 0; t < 4 + g * 10; t++) {
+        const bx = i * cell + R() * cell, by = j * cell + R() * cell;
+        ctx.strokeStyle = rgb(mix([170, 160, 70], [90, 140, 50], R())); ctx.lineWidth = 1.4; ctx.lineCap = "round";
+        for (const d of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + d * 5, by - 6 - g * 4); ctx.stroke(); }
+      }
+    }
+  },
+  herb(ctx, x, y, a, r, c, glow) {
+    if (glow) for (let k = 0; k < 16; k++) { const t = k * 2.4; circle(ctx, x + Math.cos(t) * r * (1.6 + (k % 3) * 0.5), y + Math.sin(t) * r * (1.6 + (k % 3) * 0.5), 1.3 + (k % 2), "rgba(255,215,90,0.85)"); }
+    ellipse(ctx, x + 3, y + 4, r * 1.2, r * 0.6, a, "rgba(70,50,20,0.25)");
+    local(ctx, x, y, a, () => {
+      const body = mix([205, 160, 105], c, 0.35);
+      ellipse(ctx, -r * 0.1, 0, r * 1.05, r * 0.55, 0, rgb(body), "#5b4128", 1.2);
+      ellipse(ctx, -r * 0.1, 0, r * 0.85, r * 0.18, 0, rgb(shade(body, 0.75)));
+      ellipse(ctx, r * 1.05, 0, r * 0.32, r * 0.24, 0, rgb(body), "#5b4128", 1.2);
+      ctx.strokeStyle = "#3b2a1a"; ctx.lineWidth = 2; ctx.lineCap = "round";
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.95, s * r * 0.12); ctx.quadraticCurveTo(r * 0.75, s * r * 0.5, r * 0.45, s * r * 0.45); ctx.stroke(); }
+    });
+  },
+  pred(ctx, x, y, a, r, c, glow) {
+    if (glow) for (let k = 0; k < 16; k++) { const t = k * 2.4; circle(ctx, x + Math.cos(t) * r * (1.6 + (k % 3) * 0.5), y + Math.sin(t) * r * (1.6 + (k % 3) * 0.5), 1.3 + (k % 2), "rgba(255,215,90,0.85)"); }
+    ellipse(ctx, x + 3, y + 4, r * 1.3, r * 0.65, a, "rgba(70,50,20,0.25)");
+    local(ctx, x, y, a, () => {
+      const body = mix([214, 160, 80], c, 0.3), mane = shade(mix([160, 90, 40], c, 0.3), 0.8);
+      ctx.strokeStyle = rgb(shade(body, 0.7)); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r * 1.0, 0); ctx.quadraticCurveTo(-r * 1.5, r * 0.3, -r * 1.8, 0); ctx.stroke();
+      circle(ctx, -r * 1.8, 0, r * 0.14, rgb(mane));
+      ellipse(ctx, -r * 0.2, 0, r * 1.0, r * 0.55, 0, rgb(body), "#5b3a1a", 1.2);
+      for (let k = 0; k < 12; k++) { const t = (k / 12) * Math.PI * 2; circle(ctx, r * 0.75 + Math.cos(t) * r * 0.42, Math.sin(t) * r * 0.42, r * 0.24, rgb(mane)); }
+      circle(ctx, r * 0.8, 0, r * 0.36, rgb(body), "#5b3a1a", 1);
+      for (const s of [-1, 1]) circle(ctx, r * 0.95, s * r * 0.14, r * 0.05, "#2a1a0a");
+    });
+  },
+};
+
+// =============== layout ===============
+function drawCard(theme, idx) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<h2>${theme.name}</h2><p>${theme.desc}</p>`;
+  const cv = document.createElement("canvas");
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  card.appendChild(cv);
+  document.getElementById("cards").appendChild(card);
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const R = rng(7 + idx * 101), cell = 30, cells = [];
+  for (let j = 0; j < H / cell; j++) for (let i = 0; i < SCENE / cell; i++) {
+    const n = Math.sin(i * 0.7 + idx) + Math.cos(j * 0.9 - idx) + R() * 1.2;
+    if (n > 0.9) cells.push([i, j, Math.min(1, (n - 0.9) / 1.4)]);
+  }
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, SCENE, H); ctx.clip();
+  theme.ground(ctx, cells, cell, R);
+  const herbs = [[90, 70], [170, 210], [260, 110], [330, 240], [420, 60], [140, 140], [480, 190]];
+  herbs.forEach(([x, y], k) => theme.herb(ctx, x, y, R() * 6.28, 11, HERB[k % HERB.length], k === 2));
+  theme.pred(ctx, 380, 150, 2.6, 16, PRED[0], false);
+  theme.pred(ctx, 545, 90, 1.9, 16, PRED[1], true);
+  ctx.restore();
+  ctx.fillStyle = "#1b1914"; ctx.fillRect(SCENE, 0, W - SCENE, H);
+  ctx.save(); ctx.beginPath(); ctx.rect(SCENE + 10, 10, W - SCENE - 20, H - 20); ctx.clip();
+  ctx.translate(SCENE + 10, 10);
+  theme.ground(ctx, [[1, 3, 0.9], [2, 3, 0.6], [6, 5, 0.8], [7, 5, 1]], 40, rng(3));
+  ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(SCENE + 10, 10, W - SCENE - 20, H - 20); ctx.clip();
+  theme.herb(ctx, SCENE + 95, 150, -0.3, 42, HERB[0], false);
+  theme.pred(ctx, SCENE + 255, 150, 0.25, 46, PRED[0], false);
+  ctx.restore();
+  ctx.font = "13px system-ui, -apple-system, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = theme.labelColor || "rgba(255,255,255,0.85)";
+  ctx.fillText("grass eater", SCENE + 95, H - 22); ctx.fillText("meat eater", SCENE + 255, H - 22);
+}
+[pixel, kawaii, night, blueprint, savanna].forEach(drawCard);
+</script>
+</body>
+</html>
