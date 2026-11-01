@@ -37,22 +37,12 @@ function makeRng(seed) {
 
 const mod = (v, n) => ((v % n) + n) % n;
 
-function riverBands() {
-  // Two vertical rivers, each RIVER_TILES grass tiles wide and on the tile grid, splitting the world into
-  // 3 strips: the middle strip has as many tiles as the two side strips together (the sides also meet
-  // through the left-right wrap-around). With 48 tiles and 4-tile rivers: sides 10 + 10, middle 20.
-  // Returns [[from, to], [from, to]] in x, or [] without rivers.
-  const t = C.RIVER_TILES, T = C.GRASS_CELL, cols = Math.floor(C.WORLD_W / T);
-  if (!t) return [];
-  const land = cols - 2 * t, middle = Math.floor(land / 2), left = Math.floor((land - middle) / 2);
-  const a = left * T, b = (left + t + middle) * T;
-  return [[a, a + t * T], [b, b + t * T]];
-}
-
-function inMiddle(x) {
-  // Whether x is in the middle strip (between the rivers); always false without rivers.
-  const r = riverBands();
-  return r.length > 0 && x > r[0][1] && x < r[1][0];
+function waterBand() {
+  // The water: the left half of the world, [from, to] in x on the grass tile grid, or null (no water).
+  // The right half is land. They meet twice: in the middle of the world, and at the left-right wrap-around.
+  if (!C.WATER_HALF) return null;
+  const T = C.GRASS_CELL, cols = Math.floor(C.WORLD_W / T);
+  return [0, Math.floor(cols / 2) * T];
 }
 
 function wrapDelta(d, size) {
@@ -74,9 +64,10 @@ class Creature {
       isPlayer: false, generation: 0, mateCooldown: 0, age: 0, glowTicks: 0, alive: true, deathCause: "", kids: 0,
       grandkids: 0, greatkids: 0, parents: [], // family, for ranking the top brains (see Hall in brain.js)
       eaten: 0, // energy it got from eating in its life (grass or meat), also for ranking the top brains
-      // for achievements (achievements.js): where it was born / last stood on dry land, rivers crossed,
-      // herbivores killed, when it was last bitten, since when each lock is on
-      bornMid: false, drySide: false, crossings: 0, herbKills: 0, bittenAt: 0, lockSince: { herb: 0, pred: 0 },
+      // bornWet: born in the water (its part of the map: its kids in the next world start in the water too).
+      // For achievements (achievements.js): times it went between water and land, herbivores killed,
+      // when it was last bitten, since when each lock is on
+      bornWet: false, crossings: 0, herbKills: 0, bittenAt: 0, lockSince: { herb: 0, pred: 0 },
       lastAction: "forward", lastSpeed: 0, glow: 0, swim: false, // swim: the brain's swim output is on
       reward: 0, rewardSum: 0, rewardAvg: 0, // collected during a tick, learned from at the creature's next think
       locked: { herb: 0, pred: 0 }, targets: { herb: null, pred: null }, // see the locks in sense(), brain.js
@@ -105,27 +96,12 @@ class World {
     for (let i = 0; i < this.grass.length; i++) {
       this.grass[i] = this.rng.random() < C.GRASS_START_FRACTION ? this.rng.random() * C.GRASS_MAX : 0;
     }
-    // Rivers: nobody can cross them, nothing grows in them, and nobody senses anything on the other side
-    // (it's out of reach anyway). midL..midR is the middle strip.
-    this.walls = false; // W: a wall down the middle of each river, so nobody can cross at all (set by the runner)
+    // Water (the left half): grass grows there too; you need the swim output to step in from land, and in it
+    // you're slower and pay more to move (see apply()).
+    this.walls = false; // W: walls where water meets land, so nobody can go between them (set by the runner)
     this.locked = new Set(); // achievements still to win (set by the runner), and the ones just won
     this.won = [];
-    this.rivers = riverBands();
-    this.midL = this.rivers.length ? this.rivers[0][1] : -1;
-    this.midR = this.rivers.length ? this.rivers[1][0] : -1;
-    this.water = new Uint8Array(this.grass.length); // 1 = grass square in a river
-    for (const [a, b] of this.rivers) {
-      for (let i = 0; i < this.gcols; i++) {
-        const cx = (i + 0.5) * C.GRASS_CELL;
-        if (cx > a && cx < b) for (let j = 0; j < this.grows; j++) this.water[j * this.gcols + i] = 1;
-      }
-    }
-    for (let i = 0; i < this.grass.length; i++) if (this.water[i]) this.grass[i] = 0;
-    // Per grass column: 1 = in the middle strip, 2 = river, 0 = a side strip (for bestGrassNear).
-    this.colSide = Uint8Array.from({ length: this.gcols }, (_, i) => {
-      const cx = (i + 0.5) * C.GRASS_CELL;
-      return this.water[i] ? 2 : cx > this.midL && cx < this.midR ? 1 : 0;
-    });
+    this.lake = waterBand();
     this.creatures = [];
     this.lastId = 0; // every creature gets an id (per world), so a page can follow one
     this.corpses = [];
@@ -143,12 +119,12 @@ class World {
     this.corpsesOnSquare = new Map(); // grass square -> corpses lying on it (rebuilt every tick)
     for (const [species, s] of Object.entries(C.SPECIES)) {
       // The first world starts from the hand-wired starter brain; later ones from the last world's top brains.
-      // With rivers, startPerSide are born in the middle strip and startPerSide on the sides, each bred from
-      // the top brains of that same part of the map (where they were when they died, or when the world ended).
-      if (this.rivers.length) {
-        for (const mid of [true, false]) {
+      // With water, startPerSide are born in the water and startPerSide on land, each bred from the top brains
+      // born in that same part of the map.
+      if (this.lake) {
+        for (const wet of [true, false]) {
           for (let i = 0; i < s.startPerSide; i++) {
-            this.spawnWithBrain(species, parents.newChild(species, this.rng, mid).brain, { x: this.xIn(mid, s.radius) });
+            this.spawnWithBrain(species, parents.newChild(species, this.rng, wet).brain, { x: this.xIn(wet, s.radius) });
           }
         }
       } else {
@@ -168,7 +144,7 @@ class World {
     const c = new Creature({
       id: ++this.lastId,
       species,
-      x: this.outOfRiver(mod(x ?? this.rng.uniform(0, this.w), this.w), s.radius, x),
+      x: mod(x ?? this.rng.uniform(0, this.w), this.w),
       y: World.inside(y ?? this.rng.uniform(0, this.h), s.radius, this.h),
       angle: this.rng.uniform(-Math.PI, Math.PI),
       energy: energy ?? s.maxEnergy * 0.7,
@@ -181,7 +157,7 @@ class World {
       mateCooldown: Math.floor(s.mateCooldown / 2),
       lifespan: Math.round(this.rng.uniform(s.lifespan[0], s.lifespan[1]) * C.FPS), // ticks until old age
     });
-    c.bornMid = c.drySide = inMiddle(c.x);
+    c.bornWet = this.inWater(c.x, 0);
     this.creatures.push(c);
     if (c.generation >= 50) this.achieve("gen50", c);
     return c;
@@ -196,17 +172,17 @@ class World {
 
   outcome() {
     // How the world stands: null while it goes on, the name of a species that died out everywhere, or
-    // "tie" when the rivers keep them apart for good: herbivores only on one side, carnivores only on the other.
+    // "tie" when they're apart: herbivores only in the water and carnivores only on land, or the other way round.
     let hm = 0, hs = 0, pm = 0, ps = 0;
     for (const c of this.creatures) {
       if (!c.alive) continue;
-      const mid = c.x > this.midL && c.x < this.midR;
-      if (c.species === "herbivore") mid ? hm++ : hs++;
-      else mid ? pm++ : ps++;
+      const wet = this.inWater(c.x, 0);
+      if (c.species === "herbivore") wet ? hm++ : hs++;
+      else wet ? pm++ : ps++;
     }
     if (hm + hs === 0) return "herbivore";
     if (pm + ps === 0) return "carnivore";
-    if (this.rivers.length && ((hm && !hs && ps && !pm) || (hs && !hm && pm && !ps))) return "tie";
+    if (this.lake && ((hm && !hs && ps && !pm) || (hs && !hm && pm && !ps))) return "tie";
     return null;
   }
 
@@ -236,40 +212,28 @@ class World {
     return [bx, by];
   }
 
-  xIn(mid, radius) {
-    // A random x in the middle strip, or in the side strips (which meet through the wrap-around).
-    if (mid) return this.rng.uniform(this.midL + radius, this.midR - radius);
-    // sides: from the right river's far bank, around the wrap, to the left river's near bank
-    return mod(this.rng.uniform(this.rivers[1][1] + radius, this.rivers[0][0] + this.w - radius), this.w);
+  xIn(wet, radius) {
+    // A random x in the water, or on land (clear of the walls W can put where they meet).
+    const [a, b] = this.lake, m = radius + C.WATER_WALL;
+    return wet ? this.rng.uniform(a + m, b - m) : mod(this.rng.uniform(b + m, a + this.w - m), this.w);
   }
 
   stopAtWall(x, fromX, radius) {
-    // A wall (RIVER_WALL px thick) runs down the middle of each river: a body moving from fromX to x stops at it.
-    const half = C.RIVER_WALL / 2;
-    for (const [a, b] of this.rivers) {
-      const wx = (a + b) / 2;
-      if (fromX <= wx && x + radius > wx - half) return wx - half - radius;
-      if (fromX > wx && x - radius < wx + half) return wx + half + radius;
+    // A wall (WATER_WALL px thick) stands at both places where water meets land: a body moving from fromX to x stops at it.
+    const half = C.WATER_WALL / 2;
+    for (const wx of this.lake) {
+      const from = wrapDelta(fromX - wx, this.w), to = from + (x - fromX); // positions relative to the wall
+      if (from <= 0 && to + radius > -half) return x + (-half - radius - to);
+      if (from > 0 && to - radius < half) return x + (half + radius - to);
     }
     return x;
   }
 
-  onSide(x, radius, mid) {
-    // Keep a body at x out of the water, on the bank of its own side (`mid`: middle strip or sides), e.g. for
-    // a baby whose parent is swimming: it's born on the parent's side, never on the far bank.
-    if (!this.rivers.length) return x;
-    const [left, right] = this.rivers;
-    if (x + radius > left[0] && x - radius < left[1]) return mid ? left[1] + radius : left[0] - radius;
-    if (x + radius > right[0] && x - radius < right[1]) return mid ? right[0] - radius : right[1] + radius;
-    return x;
-  }
-
-  outOfRiver(x, radius, fromX = x) {
-    // A body of `radius` at x may not overlap a river: push it out to the side `fromX` is on.
-    for (const [a, b] of this.rivers) {
-      if (x + radius > a && x - radius < b) return fromX < (a + b) / 2 ? a - radius : b + radius;
-    }
-    return x;
+  outOfWater(x, radius, fromX) {
+    // A body of `radius` at x may not overlap the water: push it back onto the bank `fromX` is nearer to.
+    if (!this.inWater(x, radius)) return x;
+    const [a, b] = this.lake;
+    return Math.abs(wrapDelta(fromX - b, this.w)) <= Math.abs(wrapDelta(fromX - a, this.w)) ? b + radius : a + this.w - radius;
   }
 
   achieve(id, c = null) {
@@ -277,50 +241,35 @@ class World {
     // sets `locked` to the ones nobody has won yet). The runner reads and empties `won` after each step.
     if (!this.locked.has(id)) return;
     this.locked.delete(id);
-    this.won.push({ id, species: c ? c.species : null, creature: c ? c.id : null, mid: c ? c.drySide : null });
+    this.won.push({ id, species: c ? c.species : null, creature: c ? c.id : null, mid: c ? c.bornWet : null });
   }
 
   inWater(x, radius) {
-    // Whether a body of `radius` at x overlaps a river.
-    for (const [a, b] of this.rivers) if (x + radius > a && x - radius < b) return true;
+    // Whether a body of `radius` at x overlaps the water (radius 0: whether its center is in the water).
+    if (!this.lake) return false;
+    const [a, b] = this.lake;
+    for (const s of [x - this.w, x, x + this.w]) if (s + radius > a && s - radius < b) return true;
     return false;
   }
 
   nearestWater(me) {
-    // The nearest river: { d: distance from my body's edge to the water (0 = touching or in it),
-    // dx: which way it is (+ right, - left) }, or null without rivers.
-    let best = null;
-    for (const [a, b] of this.rivers) {
-      const toA = wrapDelta(a - me.x, this.w), toB = wrapDelta(b - me.x, this.w);
-      let d, dx;
-      if (toA <= 0 && toB >= 0) { d = 0; dx = Math.abs(toA) < Math.abs(toB) ? toA : toB; } // in it
-      else if (toA > 0) { d = toA; dx = toA; }
-      else { d = -toB; dx = toB; }
-      d = Math.max(0, d - me.spec.radius);
-      if (!best || d < best.d) best = { d, dx };
-    }
-    return best;
+    // The nearest edge between water and land: { d: distance from my body's edge to the water (0 = touching or
+    // in it), dx: which way that edge is (+ right, - left) }, or null without water.
+    if (!this.lake) return null;
+    const [a, b] = this.lake, toA = wrapDelta(a - me.x, this.w), toB = wrapDelta(b - me.x, this.w);
+    const dx = Math.abs(toA) < Math.abs(toB) ? toA : toB;
+    return { d: this.inWater(me.x, 0) ? 0 : Math.max(0, Math.abs(dx) - me.spec.radius), dx };
   }
 
   waterAchievements(c, wasWet) {
-    // After a step: into the water (swimmer), or out of it on the other bank (crossed, round trip).
+    // After a step: into the water from land (swimmer), or into the part it wasn't born in (crossed), and back.
     const wet = this.inWater(c.x, c.spec.radius);
-    if (wet && !wasWet) this.achieve("swimmer", c);
-    if (!wet && wasWet) {
-      const side = inMiddle(c.x);
-      if (side !== c.drySide) {
-        c.crossings++;
-        this.achieve(c.species === "carnivore" ? "crossedCarnivore" : "crossedHerbivore", c);
-        if (c.crossings >= 2 && side === c.bornMid) this.achieve("roundTrip", c);
-      }
-      c.drySide = side;
-    }
-  }
-
-  sameSide(x1, x2) {
-    // Whether two x positions are on the same side of the rivers (always true without rivers).
-    const L = this.midL, R = this.midR;
-    return (x1 > L && x1 < R) === (x2 > L && x2 < R);
+    if (wet === wasWet) return;
+    if (wet) this.achieve("swimmer", c);
+    c.crossings++;
+    const home = this.inWater(c.x, 0) === c.bornWet;
+    if (!home) this.achieve(c.species === "carnivore" ? "crossedCarnivore" : "crossedHerbivore", c);
+    else if (c.crossings >= 2) this.achieve("roundTrip", c);
   }
 
   bucketIndex(x, y) {
@@ -408,7 +357,7 @@ class World {
     const W = this.w, grid = this.corpseGrid;
     for (const b of this.nearbyBuckets(me.x, me.y, radius)) {
       for (const k of grid[b]) {
-        if (k.meat <= 0 || !this.sameSide(k.x, me.x)) continue;
+        if (k.meat <= 0) continue;
         const d = Math.hypot(wrapDelta(k.x - me.x, W), k.y - me.y);
         if (d <= bestD) {
           best = k;
@@ -428,10 +377,10 @@ class World {
     // can see each other, and it was most of the time of a tick.
     const vision = me.spec.visionRange, W = this.w, half = W / 2, mx = me.x, my = me.y, mine = me.species;
     let herb = null, herbD = Infinity, pred = null, predD = Infinity, mate = null, mateD = Infinity;
-    const grid = this.grid, L = this.midL, R = this.midR, myMid = mx > L && mx < R;
+    const grid = this.grid;
     for (const b of this.nearbyBuckets(mx, my, vision)) {
       for (const o of grid[b]) {
-        if (o === me || !o.alive || (o.x > L && o.x < R) !== myMid) continue; // nothing across a river
+        if (o === me || !o.alive) continue;
         let dx = o.x - mx;
         dx = dx > half ? dx - W : dx < -half ? dx + W : dx; // wrapDelta, inlined
         const dy = o.y - my, d = Math.sqrt(dx * dx + dy * dy);
@@ -445,7 +394,7 @@ class World {
     // of margin, more than anyone moves in a tick, so nobody in range is missed).
     const G = C.GLOW_RANGE, G2 = G * G, V2 = vision * vision, glowGrid = this.glowGrid;
     for (const b of this.nearbyBuckets(mx, my, G)) for (const o of glowGrid[b]) {
-      if (o === me || !o.alive || (o.x > L && o.x < R) !== myMid) continue;
+      if (o === me || !o.alive) continue;
       const dy = o.y - my;
       if (dy > G || dy < -G) continue; // cheap reject before any multiplication
       let dx = o.x - mx;
@@ -496,14 +445,13 @@ class World {
     if (!this.distPenalty || this.distPenalty.k !== k) { // distance cost per offset, computed once
       this.distPenalty = { k, t: Float32Array.from({ length: n * n }, (_, q) => Math.hypot((q % n) - k, Math.floor(q / n) - k) * C.GRASS_MAX / 10) };
     }
-    const pen = this.distPenalty.t, side = this.colSide, mine = x > this.midL && x < this.midR ? 1 : 0;
+    const pen = this.distPenalty.t;
     let bi = i, bj = j, bestScore = -Infinity;
     for (let jj = Math.max(0, j - k); jj < Math.min(this.grows, j + k + 1); jj++) {
       const row = jj * cols, prow = (jj - j + k) * n;
       for (let di = -k; di <= k; di++) {
         let ii = i + di;
         if (ii < 0) ii += cols; else if (ii >= cols) ii -= cols;
-        if (side[ii] !== mine) continue; // river, or across it
         const score = this.grass[row + ii] - pen[prow + di + k];
         if (score > bestScore) {
           bestScore = score;
@@ -538,7 +486,7 @@ class World {
       const [i, j] = this.gcell(k.x, k.y), idx = j * this.gcols + i;
       const rot = Math.min(C.CORPSE_DECAY, k.meat);
       k.meat -= rot;
-      if (!this.water[idx]) this.grass[idx] = Math.min(C.GRASS_MAX, this.grass[idx] + rot * C.CORPSE_TO_GRASS);
+      this.grass[idx] = Math.min(C.GRASS_MAX, this.grass[idx] + rot * C.CORPSE_TO_GRASS);
       if (k.meat > 0) {
         this.meatOnSquare[idx] += k.meat;
         if (!this.corpsesOnSquare.has(idx)) this.corpsesOnSquare.set(idx, []);
@@ -562,7 +510,6 @@ class World {
     for (let j = 0; j < rows; j++) {
       for (let i = 0; i < cols; i++) {
         const idx = j * cols + i, v = prev[idx];
-        if (this.water[idx]) continue; // nothing grows in a river
         let sum = prev[j * cols + mod(i - 1, cols)] + prev[j * cols + mod(i + 1, cols)], n = 2;
         if (j > 0) { sum += prev[idx - cols]; n++; }
         if (j < rows - 1) { sum += prev[idx + cols]; n++; }
@@ -594,18 +541,18 @@ class World {
     } else if (action === "forward") {
       speed = Math.max(0, Math.min(Number(speed) || 0, s.maxSpeed));
       // Left-right wraps around. Top/bottom walls stop you; hitting one at an angle slides you along it.
-      // Rivers stop you, unless your swim output is on: then you can step in at the edge and swim across.
+      // The water's edge stops you, unless your swim output is on: then you can step in.
       // In the water you move at SWIM_SPEED and pay SWIM_COST x the normal moving cost; once in, you can always get out.
-      const wet = this.rivers.length > 0 && this.inWater(c.x, s.radius);
+      const wet = this.inWater(c.x, s.radius);
       const v = wet ? speed * C.SWIM_SPEED : speed;
       const wantX = c.x + Math.cos(c.angle) * v;
-      let x = this.rivers.length && !c.swim && !wet ? this.outOfRiver(wantX, s.radius, c.x) : wantX;
-      if (this.walls) x = this.stopAtWall(x, c.x, s.radius); // walls in the rivers stop swimmers too
+      let x = this.lake && !c.swim && !wet ? this.outOfWater(wantX, s.radius, c.x) : wantX;
+      if (this.walls && this.lake) x = this.stopAtWall(x, c.x, s.radius); // the walls stop swimmers too
       c.x = mod(x, this.w);
-      if (this.rivers.length) this.waterAchievements(c, wet);
+      if (this.lake) this.waterAchievements(c, wet);
       const wantY = c.y + Math.sin(c.angle) * v;
       c.y = World.inside(wantY, s.radius, this.h);
-      if (Math.abs(c.y - wantY) > 0.01 || x !== wantX) c.reward -= C.REWARD_WALL; // bumped into a wall or river
+      if (Math.abs(c.y - wantY) > 0.01 || x !== wantX) c.reward -= C.REWARD_WALL; // bumped into a wall or the water
       c.energy -= C.MOVE_COST_K * speed * speed * (wet ? C.SWIM_COST : 1);
       c.lastSpeed = speed;
     } else if (action === "eat") {
@@ -667,7 +614,7 @@ class World {
       if (c.species === "carnivore" && target.species === "herbivore") {
         this.achieve("firstBlood", c);
         if (++c.herbKills >= 5) this.achieve("serialHunter", c);
-        if (this.rivers.length && this.inWater(target.x, target.spec.radius)) this.achieve("straitHunter", c);
+        if (this.inWater(target.x, target.spec.radius)) this.achieve("straitHunter", c);
       } else if (c.species === "carnivore") {
         this.achieve("cannibal", c);
       } else {
@@ -681,10 +628,8 @@ class World {
   mate(c) {
     const s = c.spec;
     if (!this.readyToMate(c) || this.count("herbivore") + this.count("carnivore") >= C.MAX_CREATURES) return;
-    // Partners must be from the same side of the rivers (the last dry land each stood on): genes only cross
-    // a river when a creature swims all the way across, never by mating from the water with the far bank.
     const [partner] = this.nearest(c, s.radius * 2 + C.MATE_REACH, null,
-      (o) => o.species === c.species && this.readyToMate(o) && o.drySide === c.drySide);
+      (o) => o.species === c.species && this.readyToMate(o));
     if (!partner) return;
     for (const p of [c, partner]) {
       p.energy -= s.mateCost;
@@ -701,14 +646,18 @@ class World {
     for (const p of [c, partner]) if (p.kids >= 10) this.achieve("bigFamily", p);
     for (const g of great) this.achieve("grandparent", g);
     for (const p of [c, partner, ...grand, ...great]) if (Hall.family(p) >= 50) this.achieve("dynasty", p);
-    if (this.rivers.length && c.drySide !== c.bornMid) this.achieve("newLand", c);
+    const wetNow = this.inWater(c.x, 0);
+    if (this.lake && wetNow !== c.bornWet) this.achieve("newLand", c);
     // The only way brains learn: the child's brain is the mean of its parents' brains + mutation.
+    // Born next to the parent, in the water if the parent is in it, on land if not (never across a wall).
+    let bx = c.x + this.rng.uniform(-8, 8);
+    if (this.inWater(bx, 0) !== wetNow) bx = c.x;
     const child = this.spawnWithBrain(c.species, Brain.child(c.brain, partner.brain, this.rng, s.mutationScaled), {
-      x: this.onSide(c.x + this.rng.uniform(-8, 8), s.radius, c.drySide), y: c.y + this.rng.uniform(-8, 8),
+      x: bx, y: c.y + this.rng.uniform(-8, 8),
       energy: s.childEnergy, generation: Math.max(c.generation, partner.generation) + 1,
     });
     child.parents = [c, partner];
-    if (this.rivers.length && c.bornMid !== partner.bornMid) this.achieve("geneSwap", child);
+    if (this.lake && c.bornWet !== partner.bornWet) this.achieve("geneSwap", child);
     this.stat(`${c.species}_born`);
   }
 

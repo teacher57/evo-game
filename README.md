@@ -1,7 +1,7 @@
 # Evo game
 
 Carnivores and herbivores with tiny neural-network brains that evolve only by breeding (plus a little
-learning during life). Two rivers split the world into islands; creatures can learn to swim across.
+learning during life). The left half of the world is water, the right half land; creatures can learn to swim.
 Plain JavaScript, no build step. AI friendly.
 
 ## Run it
@@ -10,7 +10,7 @@ Plain JavaScript, no build step. AI friendly.
   [watch.html](watch.html). On a Mac, `server/mac.sh start|stop|status` does the same in the background.
 
 ## Files
-- [RULES.md](RULES.md): every rule of the world, the brains, breeding, rivers and achievements.
+- [RULES.md](RULES.md): every rule of the world, the brains, breeding, water and achievements.
 - [config.js](config.js): all the numbers. [world.js](world.js): the simulation. [brain.js](brain.js): brains,
   breeding and the top-brains hall. [achievements.js](achievements.js): the achievements list.
 - [main.js](main.js), [player.js](player.js), [index.html](index.html): the page and the keyboard player.

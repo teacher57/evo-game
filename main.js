@@ -36,7 +36,7 @@ function spawnPlayer(species) {
 function restartWorld(end) {
   // Nothing ever spawns mid-world. When a species dies out (end = its name), the whole world starts over,
   // bred from the hall of fame (the biggest families, survivors of the old world included). A tie (the
-  // rivers keep the two species apart) gives each +0.5.
+  // two species are apart, one only in the water and the other only on land) gives each +0.5.
   for (const c of world.creatures) world.hall.consider(c);
   world.hall.rank();
   const winner = end === "tie" ? "tie" : end === "herbivore" ? "carnivore" : "herbivore";
@@ -133,7 +133,7 @@ function glideCreatures() {
 
 let localWalls = false; // local game: walls stay for later worlds too
 function toggleWalls() {
-  // Walls down the middle of both rivers: nobody can cross, not even swimmers (each island on its own).
+  // Walls where water meets land (the middle of the world and the left-right seam): nobody gets between them.
   if (server) fetch(`${server}/walls`, { method: "POST" }).catch(() => {}); // shared, like the speed
   else world.walls = localWalls = !localWalls;
 }
@@ -193,13 +193,13 @@ async function openRunMenu() {
     }
     const head = `run ${runLabel(r.id)}${r.current ? " (current)" : ""} · ${r.worlds} worlds · score ${r.score.herbivore}:${r.score.carnivore}`;
     const opts = [];
-    if (b.mid) opts.push(`<option value="${r.id}@mid">${head} · its ${b.mid} middle brains</option>`);
-    if (b.sides) opts.push(`<option value="${r.id}@sides">${head} · its ${b.sides} side brains</option>`);
-    if (b.brains > b.mid + b.sides) opts.push(`<option value="${r.id}">${head} · its ${b.brains} brains (from before the rivers)</option>`);
+    if (b.mid) opts.push(`<option value="${r.id}@mid">${head} · its ${b.mid} water brains</option>`);
+    if (b.sides) opts.push(`<option value="${r.id}@sides">${head} · its ${b.sides} land brains</option>`);
+    if (b.brains > b.mid + b.sides) opts.push(`<option value="${r.id}">${head} · its ${b.brains} brains (from before there were parts)</option>`);
     return opts;
   })).join("");
-  const pickers = [["herbivore", "mid", "herbivores · middle strip"], ["herbivore", "sides", "herbivores · sides"],
-    ["carnivore", "mid", "carnivores · middle strip"], ["carnivore", "sides", "carnivores · sides"]]
+  const pickers = [["herbivore", "mid", "herbivores · water"], ["herbivore", "sides", "herbivores · land"],
+    ["carnivore", "mid", "carnivores · water"], ["carnivore", "sides", "carnivores · land"]]
     .map(([sp, part, label]) => `<label>${label}<select data-sp="${sp}" data-part="${part}">${options(sp)}</select></label>`).join("");
   el.innerHTML = `
     <h2>New run</h2>
@@ -360,7 +360,7 @@ function achWho(won) {
 }
 
 function achWhere(won) {
-  const part = won.mid === true ? " · middle strip" : won.mid === false ? " · sides" : "";
+  const part = won.mid === true ? " · born in the water" : won.mid === false ? " · born on land" : "";
   return `${won.run ? `run ${runLabel(won.run)} · ` : ""}world ${won.world}${part}`;
 }
 
@@ -555,8 +555,8 @@ addEventListener("wheel", (e) => {
 
 const INK = (a) => `rgba(255,255,255,${a})`;
 const GRASS_LEVELS = 8; // grass is drawn as one of 8 hatching densities
-let hatchTiles = [], hatchTilePx = 0, riverTile = null;
-const WATER = (a) => `rgba(79, 155, 255, ${a})`; // river blue
+let hatchTiles = [], waterTiles = [], hatchTilePx = 0;
+const WATER = (a) => `rgba(79, 155, 255, ${a})`; // water blue
 
 function hatchTile(px, t, color) {
   // One hatched square (density t = 0..1) drawn in `color(alpha)`.
@@ -585,14 +585,17 @@ function hatchTile(px, t, color) {
 }
 
 function buildHatchTiles() {
-  // Pre-draw one hatched square per grass level (and the river square) at the current screen resolution,
+  // Pre-draw one hatched square per grass level (white on land, blue in the water) at the current screen resolution,
   // so 1300 squares per frame are just image copies (and stay sharp on Retina).
   const px = Math.max(4, Math.ceil(C.GRASS_CELL * view.s * view.dpr));
   if (px === hatchTilePx) return;
   hatchTilePx = px;
   hatchTiles = [null];
-  for (let k = 1; k <= GRASS_LEVELS; k++) hatchTiles.push(hatchTile(px, k / GRASS_LEVELS, INK));
-  riverTile = hatchTile(px, 1, WATER); // water: hatched like the densest grass, in blue
+  waterTiles = [hatchTile(px, 0, WATER)]; // a water square with no grass: just the faint blue fill
+  for (let k = 1; k <= GRASS_LEVELS; k++) {
+    hatchTiles.push(hatchTile(px, k / GRASS_LEVELS, INK));
+    waterTiles.push(hatchTile(px, k / GRASS_LEVELS, WATER));
+  }
 }
 
 function drawGrid() {
@@ -606,28 +609,24 @@ function drawGrid() {
 
 function drawGrass() {
   buildHatchTiles();
-  const g = world.grass, cell = C.GRASS_CELL;
-  for (let j = 0; j < world.grows; j++) {
-    for (let i = 0; i < world.gcols; i++) {
+  // Grass is hatched white on land and blue in the water (water squares without grass are a faint blue).
+  const g = world.grass, cell = C.GRASS_CELL, band = waterBand();
+  for (let i = 0; i < world.gcols; i++) {
+    const cx = (i + 0.5) * cell, tiles = band && cx > band[0] && cx < band[1] ? waterTiles : hatchTiles;
+    for (let j = 0; j < world.grows; j++) {
       const level = Math.round((g[j * world.gcols + i] / C.GRASS_MAX) * GRASS_LEVELS);
-      if (level > 0) ctx.drawImage(hatchTiles[level], i * cell, j * cell, cell, cell);
+      if (tiles[level]) ctx.drawImage(tiles[level], i * cell, j * cell, cell, cell);
     }
   }
 }
 
-function drawRivers() {
-  // Water squares: hatched like grass, but blue (the one colored thing besides the creatures).
-  buildHatchTiles();
-  const cell = C.GRASS_CELL;
-  for (const [a, b] of riverBands()) {
-    for (let x = a; x < b; x += cell) {
-      for (let j = 0; j < world.grows; j++) ctx.drawImage(riverTile, x, j * cell, cell, cell);
-    }
-  }
-  if (world.walls) { // W: a solid wall down the middle of each river, drawn like the top and bottom walls
-    const t = C.RIVER_WALL;
-    for (const [a, b] of riverBands()) {
-      const wx = (a + b) / 2;
+function drawWaterWalls() {
+  // W: solid walls where water meets land (in the middle, and at the left and right edges, which meet
+  // through the wrap-around), drawn like the top and bottom walls.
+  const band = waterBand();
+  if (world.walls && band) {
+    const t = C.WATER_WALL;
+    for (const wx of [band[0], band[1], band[0] + world.w]) {
       ctx.fillStyle = "#2a2a2a";
       ctx.fillRect(wx - t / 2, 0, t, world.h);
       ctx.strokeStyle = INK(0.85);
@@ -779,7 +778,7 @@ function drawWorld() {
   ctx.fillRect(0, 0, world.w, world.h);
   drawGrid();
   drawGrass();
-  drawRivers();
+  drawWaterWalls();
   drawWalls();
   for (const k of world.corpses) wrapped(k, 12, drawCorpse);
   for (const c of world.creatures) if (c.glow > 0) wrapped(c, c.spec.radius * 4, drawGlow);
@@ -893,7 +892,7 @@ function drawHud() {
   const lr = (sp) => (server ? (world.lr || {})[sp] || 0 : averageLearnRate(world, sp)).toPrecision(2);
   text(`learning gene  herbivores ${lr("herbivore")}   ·   carnivores ${lr("carnivore")}`, x + 10 * u, x + 53 * u);
   if (lastEnd && !alive) {
-    text(`world ${lastEnd.worldNo}: ${lastEnd.winner === "tie" ? "a tie (the rivers kept them apart)" : `${lastEnd.winner}s won`} after ${clock(lastEnd.seconds * C.FPS)}`,
+    text(`world ${lastEnd.worldNo}: ${lastEnd.winner === "tie" ? "a tie (one species only in the water, the other only on land)" : `${lastEnd.winner}s won`} after ${clock(lastEnd.seconds * C.FPS)}`,
       x + 10 * u, x + 75 * u, 14, "#a8a8a8");
   }
   if (alive) {
@@ -974,7 +973,7 @@ function render() {
   if (runButton) runButton.style.display = inspect ? "none" : ""; // the brain panel takes the right side
   if (achButton) achButton.style.display = inspect ? "none" : "";
   if (wallsButton) {
-    wallsButton.style.display = inspect || !riverBands().length ? "none" : "";
+    wallsButton.style.display = inspect || !waterBand() ? "none" : "";
     wallsButton.textContent = `Walls: ${world.walls ? "on" : "off"} (W)`;
   }
   if (saveButton) saveButton.style.display = inspect ? "" : "none"; // only while looking at a brain

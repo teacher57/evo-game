@@ -15,7 +15,7 @@ const LOCKS = [ // > 0.5: that sense keeps pointing at the same creature instead
   { slot: "herb", out: ACTIONS.length + 1 },
   { slot: "pred", out: ACTIONS.length + 2 },
 ];
-const SWIM_OUT = ACTIONS.length + 3; // > 0.5: may step into a river (only matters at the water's edge)
+const SWIM_OUT = ACTIONS.length + 3; // > 0.5: may step into the water from land (only matters at the water's edge)
 
 function brainSize(hidden = C.BRAIN_HIDDEN, senses = SENSES, outputs = OUTPUTS) {
   return hidden * (senses + 1) + outputs * (hidden + 1); // +1 = bias
@@ -226,8 +226,8 @@ function sense(me, world) {
   x[25] = (me.y / world.h) * 2 - 1;     // -1 = at the top wall, 1 = at the bottom wall
   x[26] = Math.sin(me.angle);          // heading: -1 = facing up, 1 = facing down
   x[27] = me.lastSpeed / s.maxSpeed;
-  // The nearest river (if I can see it): how close, which way (rivers run up-down, so it's straight
-  // left or right of me), and whether I'm in the water now.
+  // The nearest edge between water and land (if I can see it): how close, which way (edges run up-down, so
+  // it's straight left or right of me; in the water: the way to the nearer bank), and whether I'm in the water now.
   const r = world.nearestWater(me);
   if (r && r.d <= s.visionRange) {
     const rel = wrapAngle((r.dx >= 0 ? 0 : Math.PI) - me.angle);
@@ -400,10 +400,10 @@ class Hall {
     // first, then the latest to die), so evolution goes on from them instead of from the starter brain.
     const list = [];
     for (const [c, n] of this.seen) {
-      if (c.species === sp && (mid === undefined || c.drySide === mid)) list.push({ c, n });
+      if (c.species === sp && (mid === undefined || c.bornWet === mid)) list.push({ c, n });
     }
     list.sort((a, b) => (b.c.alive - a.c.alive) || ((b.c.diedAt || 0) - (a.c.diedAt || 0)) || b.n - a.n);
-    return list.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: 0, score: 0, n, mid: c.drySide, last: true }));
+    return list.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: 0, score: 0, n, mid: c.bornWet, last: true }));
   }
 
   survivors(sp, mid) {
@@ -412,7 +412,7 @@ class Hall {
     // Herbivores that glow all the time are skipped, unless that leaves nobody.
     let alive = [];
     for (const [c, n] of this.seen) {
-      if (c.alive && c.species === sp && (mid === undefined || c.drySide === mid)) alive.push({ c, n });
+      if (c.alive && c.species === sp && (mid === undefined || c.bornWet === mid)) alive.push({ c, n });
     }
     const calm = alive.filter(({ c }) => !(sp === "herbivore" && c.glowTicks > C.HALL_MAX_GLOW * c.age));
     if (calm.length) alive = calm;
@@ -420,13 +420,13 @@ class Hall {
     for (const { c } of alive) maxEaten = Math.max(maxEaten, c.eaten), maxKids = Math.max(maxKids, c.kids);
     const key = (c) => (maxEaten ? c.eaten / maxEaten : 0) + (maxKids ? c.kids / maxKids : 0);
     alive.sort((a, b) => key(b.c) - key(a.c) || b.n - a.n);
-    return alive.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: c.kids, score: Hall.family(c), n, mid: c.drySide }));
+    return alive.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: c.kids, score: Hall.family(c), n, mid: c.bornWet }));
   }
 
   rank() {
     // best[species] = the creatures still alive that ate and mated most (survivors). A species with nobody
     // alive (in a part) falls back to the top HALL_SIZE by family score (ties: more kids, then the newest).
-    // With rivers: the middle strip and the sides each breed their own. A part where nobody is alive and
+    // With water: the water-born and the land-born each breed their own. A part where nobody is alive and
     // nobody had a baby takes its last creatures instead (lastOnes), never the other side's.
     if (this.seen.size === 0) return this;
     for (const sp of Object.keys(this.best)) {
@@ -435,11 +435,11 @@ class Hall {
         if (c.species !== sp) continue;
         // Herbivores that glow all the time are beacons for carnivores; don't breed from them.
         if (c.species === "herbivore" && c.glowTicks > C.HALL_MAX_GLOW * c.age) continue;
-        // Its part of the map: the side of the last dry land it stood on (being in a river doesn't count as crossing).
-        list.push({ brain: c.brain, kids: c.kids, score: Hall.family(c), n, mid: c.drySide });
+        // Its part of the map (`mid` in saved brains): true = born in the water, false = born on land.
+        list.push({ brain: c.brain, kids: c.kids, score: Hall.family(c), n, mid: c.bornWet });
       }
       list.sort((a, b) => b.score - a.score || b.kids - a.kids || b.n - a.n);
-      if (riverBands().length) {
+      if (waterBand()) {
         const N = C.HALL_SIZE, part = (mid) => {
           const alive = this.survivors(sp, mid);
           if (alive.length) return alive;
@@ -460,10 +460,10 @@ class Hall {
   }
 
   newChild(species, rng, mid) {
-    // A child of two top brains from one part of the map: `mid` true = the middle strip, false = the sides,
-    // undefined = anywhere. Genes never cross a river unless a creature swims across itself: if this species
-    // has no top brains from that part, the child gets the starter brain instead (brains saved before rivers
-    // existed have no part, so they fit anywhere).
+    // A child of two top brains from one part of the map: `mid` true = born in the water, false = born on land,
+    // undefined = anywhere. Water-born brains breed water-born kids, land-born brains land-born kids: if this
+    // species has no top brains from that part, the child gets the starter brain instead (brains saved before
+    // there were parts fit anywhere).
     const list = this.best[species], scaled = C.SPECIES[species].mutationScaled;
     const pool = !C.HALL_SPECIES.includes(species) ? [] : mid === undefined ? list
       : list.filter((e) => e.mid === mid || e.mid === undefined);
@@ -498,7 +498,7 @@ const SENSE_NAMES = [
   "glowing mate: seen", "glowing mate: closeness", "glowing mate: side", "glowing mate: ahead",
   "corpse: seen", "corpse: closeness", "corpse: side", "corpse: ahead",
   "up / down position", "facing up / down", "speed last tick",
-  "river: closeness", "river: side", "river: ahead", "in water",
+  "water edge: closeness", "water edge: side", "water edge: ahead", "in water",
 ];
 const OUTPUT_NAMES = [...ACTIONS, "speed", "lock herbivore", "lock carnivore", "swim"];
 

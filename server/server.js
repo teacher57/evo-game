@@ -10,7 +10,7 @@
 //   GET  /stream  live world snapshots (Server-Sent Events, about 20 per second)
 //   POST /speed   cycle the speed 1x -> 4x -> 16x -> 32x -> 64x (shared by everyone watching)
 //   POST /pause   pause or continue the world (shared too; P in the page)
-//   POST /walls   walls down the middle of the rivers on or off (shared, kept for later worlds; W in the page)
+//   POST /walls   walls where water meets land on or off (shared, kept for later worlds; W in the page)
 //   GET  /creature/<id>[?w]  one creature's stats, senses and brain activity (?w: also its weights)
 //   POST /savebrain/<id>  save one creature's brain (its genes) as its own entry in the New run menu;
 //                 optional body {"name": "..."} (up to 60 characters)
@@ -96,7 +96,7 @@ function newRunId() {
 let run = null;            // { id, started, sources: { herbivore, carnivore } }
 let runBest = new Hall();  // the run's best brains from its finished worlds
 let world = null, worldNo = 1, speedIdx = 0, lastEnd = null;
-let walls = false;  // W in a page: walls down the middle of the rivers, for every world until switched off
+let walls = false;  // W in a page: walls where water meets land, for every world until switched off
 let winners = []; // the last few worlds' winners ("herbivore", "carnivore", "tie"), for Comeback
 
 // ---------- achievements: each won once per run (achievements.js), kept in achievements.json ----------
@@ -146,7 +146,7 @@ function bestSoFar() {
     for (const b of runBest.best[sp]) add(sp, b);
     for (const b of world.hall.best[sp]) add(sp, b);
   }
-  // Kept per part of the map (middle strip / sides / no part, for brains from before the rivers), so a later
+  // Kept per part of the map (born in the water / on land / no part, for brains from before there were parts), so a later
   // run can start each part from that part's brains.
   const h = new Hall();
   for (const sp of SPECIES) {
@@ -158,7 +158,8 @@ function bestSoFar() {
 }
 
 // Where a part of the map gets its starting brains: "starter", "<run id>" (all that run's brains of the
-// species), or "<run id>@mid" / "<run id>@sides" (only the ones from that part of its map).
+// species), or "<run id>@mid" / "<run id>@sides" (only the ones from that part of its map: "mid" = born in the
+// water, "sides" = born on land; the names are from when the parts were a middle strip and sides between rivers).
 const PARTS = { mid: true, sides: false };
 
 function validSource(src) {
@@ -208,7 +209,7 @@ function startRun(sources) {
   lastEnd = null;
   world = makeWorld(parents);
   saveState();
-  console.log(`new run ${run.id}: ${SPECIES.map((sp) => `${sp}s middle from ${sources[sp].mid}, sides from ${sources[sp].sides}`).join("; ")}`);
+  console.log(`new run ${run.id}: ${SPECIES.map((sp) => `${sp}s water from ${sources[sp].mid}, land from ${sources[sp].sides}`).join("; ")}`);
 }
 
 function resume() {
@@ -405,7 +406,7 @@ const httpServer = http.createServer((req, res) => {
         id: file, name, about, saved: new Date().toISOString(), sources: { [c.species]: `creature #${c.id} of run ${run.id}` },
         worlds: 0, score: { herbivore: 0, carnivore: 0 },
         herbivore: [], carnivore: [],
-        [c.species]: toJson([{ brain: c.brain, kids: c.kids, mid: world.rivers.length ? c.x > world.midL && c.x < world.midR : undefined }]),
+        [c.species]: toJson([{ brain: c.brain, kids: c.kids, mid: world.lake ? c.bornWet : undefined }]),
       });
       console.log(`saved brain: ${name} (${about}) -> brains/${file}.json`);
       json(res, { saved: true, id: file, name });

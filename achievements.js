@@ -3,12 +3,12 @@
 // server keeps the current run's in server/achievements.json (an ended run's in brains/<run id>.achievements.json).
 
 const ACHIEVEMENTS = [
-  // rivers and swimming
-  { id: "swimmer", title: "First Swimmer", desc: "the first creature to step into a river" },
-  { id: "crossedCarnivore", title: "Carnivore Across", desc: "the first carnivore to cross a river all the way" },
-  { id: "crossedHerbivore", title: "Herbivore Across", desc: "the first herbivore to cross a river all the way" },
-  { id: "newLand", title: "New Land", desc: "the first creature to have a baby on the other side of the river from where it was born" },
-  { id: "roundTrip", title: "Round Trip", desc: "the first creature to cross a river and come back" },
+  // water and swimming
+  { id: "swimmer", title: "First Swimmer", desc: "the first creature to step from land into the water" },
+  { id: "crossedCarnivore", title: "Carnivore Across", desc: "the first carnivore to leave where it was born (water for land, or land for water)" },
+  { id: "crossedHerbivore", title: "Herbivore Across", desc: "the first herbivore to leave where it was born (water for land, or land for water)" },
+  { id: "newLand", title: "New Land", desc: "the first creature to have a baby in the other part (water or land) than the one it was born in" },
+  { id: "roundTrip", title: "Round Trip", desc: "the first creature to leave where it was born and come back" },
   { id: "straitHunter", title: "Strait Hunter", desc: "the first carnivore to kill a herbivore that's in the water" },
   // hunting and survival
   { id: "firstBlood", title: "First Blood", desc: "the first herbivore killed by a carnivore" },
@@ -25,7 +25,7 @@ const ACHIEVEMENTS = [
   // life
   { id: "oldTimer", title: "Old Timer", desc: "the first creature to die of old age with (almost) full energy" },
   { id: "glutton", title: "Glutton", desc: "the first herbivore to eat itself to full energy" },
-  { id: "geneSwap", title: "Gene Swap", desc: "the first baby whose parents were born on different sides of the river" },
+  { id: "geneSwap", title: "Gene Swap", desc: "the first baby whose parents were born in different parts (one in the water, one on land)" },
   // worlds and runs
   { id: "stalemate", title: "Stalemate", desc: "the first world to end in a tie" },
   { id: "endurance", title: "Endurance", desc: "the first world to last 10 minutes" },

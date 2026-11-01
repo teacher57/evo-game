@@ -4,10 +4,10 @@ const deg = (d) => (d * Math.PI) / 180;
 const C = {
   WORLD_W: 1920, WORLD_H: 1080, // world size in world pixels (Full HD); the view scales it to fit
   WALL: 10,                     // solid walls on the top and bottom; left-right wraps around
-  SWIM_SPEED: 0.5,              // speed factor in a river (you can only get in with the brain's swim output on)
+  SWIM_SPEED: 0.5,              // speed factor in the water (you can only step in with the brain's swim output on)
   SWIM_COST: 2,                 // swimming costs this many times the energy of walking forward at the same speed
-  RIVER_WALL: 6,                // thickness of the walls W puts down the middle of the rivers
-  RIVER_TILES: 4,               // two vertical rivers this many grass tiles wide (0 = none); middle strip = both side strips together
+  WATER_WALL: 6,                // thickness of the walls W puts where water meets land
+  WATER_HALF: true,             // the left half of the world is water (grass grows there too), the right half land
   FPS: 30,                      // simulation ticks per second
   SEED: null,                   // set a number for a repeatable world
 
@@ -92,7 +92,7 @@ const C = {
       mateCooldown: 150,
       learnRate: 0.01, // fixed learning gene for every herbivore (0 = it evolves, see LR_MUTATION)
       mutationScaled: 0.02, // children's weights also get gauss(0, this x |weight|): big weights mutate in proportion
-      startPerSide: 20, // born in the middle strip, and again on the sides (no rivers: 2x anywhere)
+      startPerSide: 20, // born in the water, and again on land (no water: 2x anywhere)
       lifespan: [25, 35],        // seconds, random in this range; then it dies of old age
       fleeDist: 150,
     },

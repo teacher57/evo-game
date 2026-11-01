@@ -6,22 +6,20 @@ All numbers live in [config.js](config.js); change them there to rebalance the w
 ## The world
 - 1920 × 1080 px (Full HD).
 - **Left and right wrap around:** walk off the left edge and you come back on the right (and the other way).
-- **Two rivers**, four grass tiles (160 px) wide each, at x 400–560 and 1360–1520, split the world into 3 strips: the
-  middle strip (20 tiles) is exactly as big as the two side strips together (10 + 10 tiles). Without swimming you can't cross a river: you stop at the bank (a small
-  bump punishment, like a wall). With the brain's **swim** output on (see Brains) you can step in at the bank and
-  swim across, at half speed, and swimming costs **twice the energy** of walking forward at the same speed.
-  **Genes only cross a river when a creature swims all the way across.** Every creature belongs to the side of
-  the last dry land it stood on (it changes only when it climbs out on the far bank). Partners must belong to the
-  same side, babies are born on their parents' side (also when a parent is in the water), and the top-brains
-  lists sort creatures by that side too.
-- **Walls (W, or the Walls button):** puts a wall down the middle of both rivers, so nobody can cross at all,
-  not even swimmers: each island is on its own. W again (or the button) takes them away. On the server the walls
-  are shared by everyone watching and stay for the next worlds and runs until switched off. While you play, W
-  walks, so it only switches the walls while you're watching. Nothing grows in the water, babies are born on their parents' side, and nobody
-  senses anything across a river. The two side strips still meet through the left-right wrap-around, so in
-  practice there are two separate areas of the same size: the middle, and the sides. Rivers are drawn as
-  blue hatched squares, like grass. A world ends when a species is gone
-  from everywhere, or in a **tie** (see Life and death).
+- **Water and land:** the **left half** of the world (x 0–960) is **water**, the **right half** (960–1920) is
+  **land**. Grass grows in both (drawn hatched blue in the water, white on land). They meet twice: in the middle of
+  the world, and at the left/right edge (through the wrap-around). From land you can't step into the water: you
+  stop at the edge (a small bump punishment, like a wall), unless the brain's **swim** output is on (see Brains).
+  In the water you move at **half speed**, and moving costs **twice the energy** of walking forward at the same
+  speed; you can always climb out onto land. Everyone sees, bites, eats and mates across the edge.
+- **Born in the water or on land:** every creature remembers where it was born, and that's its **part of the map**.
+  Babies are born next to their parent, in the water if the parent is in the water, on land if not. In the next
+  world, the kids of water-born creatures start in the water, and the kids of land-born creatures start on land.
+- **Walls (W, or the Walls button):** puts walls where water meets land (in the middle and at the left/right edge),
+  so nobody can go between them, not even swimmers. W again (or the button) takes them away. On the server the
+  walls are shared by everyone watching and stay for the next worlds and runs until switched off. While you play,
+  W walks, so it only switches the walls while you're watching. A world ends when a species is gone from
+  everywhere, or in a **tie** (see Life and death).
   Distances and vision work across that seam too, so you can see and bite someone on the other side.
 - **Top and bottom have solid walls** (10 px). Walking into one stops you; hitting it at an angle slides you along it.
 - The game fills the browser window, and the world scales to fit it. F toggles fullscreen.
@@ -97,7 +95,7 @@ hunter can stay focused on one victim. When the target gets away or dies, the lo
 onto the herbivore they're chasing; all other locks start off, for evolution to discover. The brain viewer draws a
 dashed line to whatever the creature is locked onto.
 
-**Swim:** one more output. While it's above 0.5, you may step into a river at the bank (it does nothing away from
+**Swim:** one more output. While it's above 0.5, you may step into the water from land (it does nothing away from
 water); once in the water you can always climb out. Starter brains have swim off: swimming has to evolve. Saved
 brains from before swimming existed still load, with the new connections at 0 and swim off.
 
@@ -107,7 +105,7 @@ brains from before swimming existed still load, with the new connections at 0 an
 - the nearest herbivore, the nearest carnivore, the nearest glowing creature of my species, the nearest corpse:
   each as *seen?*, *how close*, and *which way* (sin/cos of the angle relative to where I face)
 - where I am between the top and bottom walls, which way I face up/down, and my speed last tick
-- the nearest river, if I can see it: how close, *which way* (it's always straight left or right of me), and *am I in the water*
+- the nearest edge between water and land, if I can see it: how close, *which way* (it's always straight left or right of me; in the water, the way to the nearer bank), and *am I in the water*
 
 ## Learning during life
 Every creature also learns while it lives, from rewards (like dopamine):
@@ -154,8 +152,8 @@ Every creature also learns while it lives, from rewards (like dopamine):
   The only exception is you: you choose when to enter the world (1 / 2).
 - **When a species dies out, the whole world restarts** (world 2, 3, …), and the other species **wins that world**.
   The top-left panel keeps the score (herbivores : carnivores) and shows who won the last world and after how long.
-- **Tie:** if the rivers keep the two species apart for good (herbivores only on one side, carnivores only on the
-  other), the world ends as a tie and each species gets **+0.5**.
+- **Tie:** if the two species are apart (herbivores only in the water and carnivores only on land, or the other
+  way round), the world ends as a tie and each species gets **+0.5**.
 
 ## Top brains (how a new world starts)
 - **Survivors first:** a new world breeds from the creatures **still alive when the old world ended** that
@@ -170,11 +168,11 @@ Every creature also learns while it lives, from rewards (like dopamine):
   Only creatures with at least one child count, and your own brain never counts.
   Herbivores that spent more than half their life glowing don't count either (they glow all the time).
 - The brain viewer shows this as **kids k / g / gg** (kids / grandkids / great-grandkids).
-- **Every world starts with 20 herbivores and 5 carnivores in the middle strip, and 20 + 5 on the sides.**
-- **Each part of the map breeds from its own top brains:** with rivers, the list is kept per part (the top 20 of
-  the middle strip and the top 20 of the sides, by where each creature was when it died or the world ended), and
-  every starting creature is a child of two random top brains **of its own part** (mean + mutation). Genes never
-  cross a river unless a creature swims across itself: if nobody of a species in a part had a baby, that part
+- **Every world starts with 20 herbivores and 5 carnivores in the water, and 20 + 5 on land.**
+- **Each part of the map breeds from its own top brains:** the list is kept per part (the top 20 born in the
+  water and the top 20 born on land), and every starting creature is a child of two random top brains **of its
+  own part** (mean + mutation), so water-born parents have kids that start in the water, land-born parents kids
+  that start on land. If nobody of a species in a part is alive or had a baby, that part
   breeds from its **last creatures** instead (the ones still alive at the end first, then the latest to die), and
   only a part that never had that species at all starts from the starter brain. Then the new world starts fresh lists of its own.
 - Both species evolve this way. Only the very first world (or a species whose list ended up empty, because
@@ -208,9 +206,10 @@ that has to evolve.
 - **Watching:** open [watch.html](watch.html) (it has the Mac's server built in; `watch-taylormomsen.html` has the old
   taylormomsen address; `index.html` alone is a separate local world in your browser).
 - **New run:** press **N** (or the **New run** button, top right) in the watcher page. There are **four pickers**:
-  herbivores · middle strip, herbivores · sides, carnivores · middle strip, carnivores · sides. For each one pick the
-  genome those creatures start from: **starter brains** (hand-wired), a saved run's **middle brains** or **side
-  brains** (runs from before the rivers: all their brains), or a **saved brain**. They're born in the part you
+  herbivores · water, herbivores · land, carnivores · water, carnivores · land. For each one pick the
+  genome those creatures start from: **starter brains** (hand-wired), a saved run's **water brains** or **land
+  brains** (runs from before there were parts: all their brains), or a **saved brain**. Brains saved when the map
+  had rivers count their middle-strip brains as water brains and their side brains as land brains. They're born in the part you
   picked it for. Then **Start**: the new run begins at world 1, score 0:0. Brains with an unknown shape can't be
   picked (older brains from before swimming are upgraded and work). Every run now saves its best 20 brains per
   species **per part of the map**, so later runs can pick them by part.
@@ -252,12 +251,12 @@ that has to evolve.
 | click a creature | brain viewer (any key exits) |
 | N | New run menu (server mode; Esc closes it) |
 | P | pause (in watch.html it pauses the server world for everyone watching) |
-| W | (while watching) walls down the middle of the rivers on / off |
+| W | (while watching) walls where water meets land on / off |
 | F | fullscreen on/off (Esc also leaves fullscreen) |
 
 ## Achievements
 - 22 achievements (see `achievements.js`), each won **only once per run** (over all its worlds); a **New run starts
-  them over** (the ending run's are kept in `server/brains/<run id>.achievements.json`): river ones
+  them over** (the ending run's are kept in `server/brains/<run id>.achievements.json`): water ones
   (First Swimmer, Carnivore Across, Herbivore Across, New Land, Round Trip, Strait Hunter), hunting (First Blood, Cannibal, Fighting
   Back, Close Call, Serial Hunter, Escape Artist), family (Big Family, Grandparent, Dynasty, Generation 50), life
   (Old Timer, Glutton, Gene Swap) and worlds (Stalemate, Endurance, Comeback).
@@ -265,5 +264,5 @@ that has to evolve.
 - **Reset** (at the bottom of the Achievements list, click it twice) starts the current run's achievements over
   in the middle of the run; the cleared ones are kept in `server/brains/` first, like at a New run.
 - The **Achievements** button (top right, next to New run) lists them all: who won each one (creature, or
-  species), when, and where (run, world, middle strip or sides). The server keeps the current run's in
+  species), when, and where (run, world, born in the water or on land). The server keeps the current run's in
   `server/achievements.json`; in the local game they start over when you reload the page.
