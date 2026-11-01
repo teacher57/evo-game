@@ -73,6 +73,7 @@ class Creature {
     Object.assign(this, {
       isPlayer: false, generation: 0, mateCooldown: 0, age: 0, glowTicks: 0, alive: true, deathCause: "", kids: 0,
       grandkids: 0, greatkids: 0, parents: [], // family, for ranking the top brains (see Hall in brain.js)
+      eaten: 0, // energy it got from eating in its life (grass or meat), also for ranking the top brains
       // for achievements (achievements.js): where it was born / last stood on dry land, rivers crossed,
       // herbivores killed, when it was last bitten, since when each lock is on
       bornMid: false, drySide: false, crossings: 0, herbKills: 0, bittenAt: 0, lockSince: { herb: 0, pred: 0 },
@@ -638,7 +639,8 @@ class World {
       corpse.meat -= got;
     }
     c.energy += got;
-    c.reward += (got / s.maxEnergy) * C.REWARD_FOOD;
+    c.eaten += got;
+    c.reward +=(got / s.maxEnergy) * C.REWARD_FOOD;
     if (c.species === "herbivore" && got > 0 && c.energy >= s.maxEnergy - 1e-6) this.achieve("glutton", c);
   }
 

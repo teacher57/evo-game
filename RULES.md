@@ -158,7 +158,12 @@ Every creature also learns while it lives, from rewards (like dopamine):
   other), the world ends as a tie and each species gets **+0.5**.
 
 ## Top brains (how a new world starts)
-- Every world picks its **20 herbivore brains and 20 carnivore brains with the biggest family**:
+- **Survivors first:** a new world breeds from the creatures **still alive when the old world ended** that
+  **ate and mated most**: up to 20 per species (and per part of the map), ranked half by food (energy eaten
+  in their life, compared to the best eater among them) and half by kids (compared to whoever had the most).
+  Herbivores that glow all the time are skipped unless nobody else is alive. A species with nobody alive in a
+  part (it died out there) uses the family rule below for that part instead.
+- Family rule: the **20 herbivore brains and 20 carnivore brains with the biggest family**:
   **kids + grandkids + great-grandkids** (ties: more kids, then the newest). A grandchild born after its
   grandparent died still counts for it, so the list is ranked when the world ends, survivors included.
   Each grandparent counts a baby once, even when the baby's two parents are related.

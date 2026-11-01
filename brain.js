@@ -406,10 +406,28 @@ class Hall {
     return list.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: 0, score: 0, n, mid: c.drySide, last: true }));
   }
 
+  survivors(sp, mid) {
+    // The creatures of this species still alive at the end of the world (in this part of the map), best first:
+    // half for food (energy eaten / the part's best eater's) + half for kids (kids / the part's most kids).
+    // Herbivores that glow all the time are skipped, unless that leaves nobody.
+    let alive = [];
+    for (const [c, n] of this.seen) {
+      if (c.alive && c.species === sp && (mid === undefined || c.drySide === mid)) alive.push({ c, n });
+    }
+    const calm = alive.filter(({ c }) => !(sp === "herbivore" && c.glowTicks > C.HALL_MAX_GLOW * c.age));
+    if (calm.length) alive = calm;
+    let maxEaten = 0, maxKids = 0;
+    for (const { c } of alive) maxEaten = Math.max(maxEaten, c.eaten), maxKids = Math.max(maxKids, c.kids);
+    const key = (c) => (maxEaten ? c.eaten / maxEaten : 0) + (maxKids ? c.kids / maxKids : 0);
+    alive.sort((a, b) => key(b.c) - key(a.c) || b.n - a.n);
+    return alive.slice(0, C.HALL_SIZE).map(({ c, n }) => ({ brain: c.brain, kids: c.kids, score: Hall.family(c), n, mid: c.drySide }));
+  }
+
   rank() {
-    // best[species] = the top HALL_SIZE by family score (ties: more kids, then the newest). With rivers:
-    // the top HALL_SIZE of the middle strip + the top HALL_SIZE of the sides, each area breeds its own.
-    // A part where nobody had a baby takes its last creatures instead (lastOnes), never the other side's.
+    // best[species] = the creatures still alive that ate and mated most (survivors). A species with nobody
+    // alive (in a part) falls back to the top HALL_SIZE by family score (ties: more kids, then the newest).
+    // With rivers: the middle strip and the sides each breed their own. A part where nobody is alive and
+    // nobody had a baby takes its last creatures instead (lastOnes), never the other side's.
     if (this.seen.size === 0) return this;
     for (const sp of Object.keys(this.best)) {
       const list = [];
@@ -423,12 +441,15 @@ class Hall {
       list.sort((a, b) => b.score - a.score || b.kids - a.kids || b.n - a.n);
       if (riverBands().length) {
         const N = C.HALL_SIZE, part = (mid) => {
+          const alive = this.survivors(sp, mid);
+          if (alive.length) return alive;
           const top = list.filter((e) => e.mid === mid).slice(0, N);
           return top.length ? top : this.lastOnes(sp, mid);
         };
         this.best[sp] = [...part(true), ...part(false)];
       } else {
-        this.best[sp] = list.length ? list.slice(0, C.HALL_SIZE) : this.lastOnes(sp);
+        const alive = this.survivors(sp);
+        this.best[sp] = alive.length ? alive : list.length ? list.slice(0, C.HALL_SIZE) : this.lastOnes(sp);
       }
     }
     return this;
